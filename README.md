@@ -136,6 +136,7 @@
 | 滚动条 | 6px 极细、thumb `rgba(0,0,0,0.1)` | 细节克制 |
 | 响应式 | ≤768px 字号 12 / 间距 8 / 控件 28，表格行更紧 | 小屏再紧凑一档 |
 | 业务组件 | `status-badge`（✓/✗/⚠/– 前缀状态徽标）、`sec-title`（彩色淡底块标题）、`theme-card`（变量化卡片）、筛选栏统一间距 | 跨页观感一致 |
+| **FlowTabs 页内标签** | 彩色芯片标签（4 色循环）、圆角 8px、激活实色背景 | 多步骤流程整合 |
 
 ---
 
@@ -144,11 +145,14 @@
 ```
 at-web-theme-kit/
 ├── README.md                  # 本文档：设计规范 + 接入指南
-└── theme/                     # 可直接整体复制到目标工程
-    ├── antd-theme-token.ts    # ① 组件级 Design Token（antd ConfigProvider）
-    ├── linear-components.css  # ② 全局 CSS 变量（亮/暗）+ antd 组件全局覆盖
-    ├── theme-vars.less        # ③ 业务语义 CSS 变量（亮/暗）+ .theme-card
-    └── menu-theme.less        # ④ 侧边栏浅色分层配色（@namespace 需换宿主前缀）
+├── DESIGN_SPEC.md             # 完整设计系统组件清单（1000+ 行详细规范）
+├── theme/                     # 可直接整体复制到目标工程
+│   ├── antd-theme-token.ts    # ① 组件级 Design Token（antd ConfigProvider）
+│   ├── linear-components.css  # ② 全局 CSS 变量（亮/暗）+ antd 组件全局覆盖
+│   ├── theme-vars.less        # ③ 业务语义 CSS 变量（亮/暗）+ .theme-card
+│   └── menu-theme.less        # ④ 侧边栏浅色分层配色（@namespace 需换宿主前缀）
+└── components/                # 业务组件示例与规范
+    └── FlowTabs.md            # FlowTabs 页内标签组件设计规范
 ```
 
 各文件职责与接入要点：
@@ -199,6 +203,114 @@ at-web-theme-kit/
 - [ ] 卡片无阴影、12~16px 内边距、标题 14px / 600
 - [ ] 侧边栏 Slate-100、激活态 2px Indigo 指示条
 - [ ] 深色主题可一键切换且主色提亮一档
+- [ ] FlowTabs 页内标签：4 色芯片循环、圆角 8px、激活实色背景（如适用）
+
+---
+
+## 6. 菜单结构设计模式：hideChildrenInMenu + FlowTabs
+
+### 6.1 设计理念
+
+传统多级菜单适合导航型应用，但对于**线性工作流**（如测试流程：环境准备 → 故障模拟 → 消息模拟 → 测试执行），传统菜单会让用户在多个子页面之间反复跳转，打断流程连贯性。
+
+**Linear 风格菜单结构**采用以下模式：
+
+1. **顶层一级菜单**：显示流程大类（环境准备、故障模拟、测试执行等）
+2. **hideChildrenInMenu**：隐藏二级菜单项，点击一级菜单直达流程主页
+3. **FlowTabs 页内标签**：在流程主页内通过彩色芯片标签切换各子步骤
+4. **meta.color 语义配色**：一级菜单按流程语义配色，与页内区块标题呼应
+
+### 6.2 路由配置示例
+
+```typescript
+// ==================== 环境准备（使用 hideChildrenInMenu） ====================
+const prepare: AppRouteModule = {
+  path: '/prepare',
+  name: 'Prepare',
+  component: LAYOUT,
+  redirect: '/prepare/home',
+  meta: {
+    orderNo: 20,
+    icon: 'ant-design:tool-outlined',
+    title: '环境准备',
+    color: '#30a46c',  // 绿色 - 准备/成功语义
+    hideChildrenInMenu: true,  // 隐藏子菜单，点击直达
+  },
+  children: [
+    {
+      path: 'home',
+      name: 'PrepareHome',
+      component: () => import('@/views/platform/PrepareHome.vue'),
+      meta: { title: '环境准备', icon: 'ant-design:tool-outlined' },
+    },
+    // 以下路由用于 URL 兼容和直接访问，实际菜单中隐藏
+    {
+      path: 'env',
+      name: 'EnvUsers',
+      redirect: { path: '/prepare/home', query: { tab: 'env' } },
+      meta: { title: '安装与账号', hideMenu: true },
+    },
+    {
+      path: 'proxy',
+      name: 'ProxyRules',
+      redirect: { path: '/prepare/home', query: { tab: 'proxy' } },
+      meta: { title: '代理与规则', hideMenu: true },
+    },
+  ],
+};
+```
+
+### 6.3 PrepareHome.vue 组件实现
+
+```vue
+<template>
+  <FlowTabs :tabs="tabs" />
+</template>
+
+<script lang="ts" setup>
+import { CloudServerOutlined, DownloadOutlined, GlobalOutlined, MobileOutlined } from '@ant-design/icons-vue';
+import FlowTabs from './components/FlowTabs.vue';
+import type { FlowTab } from './components/FlowTabs.vue';
+import AndroidDebug from './android-debug/index.vue';
+import Machines from './distributed/machines.vue';
+import EnvUsers from './EnvUsers.vue';
+import ProxyRules from './ProxyRules.vue';
+
+defineOptions({ name: 'PrepareHome' });
+
+const tabs: FlowTab[] = [
+  { key: 'env', title: '安装与账号', icon: DownloadOutlined, view: EnvUsers },
+  { key: 'proxy', title: '代理与规则', icon: GlobalOutlined, view: ProxyRules },
+  { key: 'machines', title: '机器管理', icon: CloudServerOutlined, view: Machines },
+  { key: 'android', title: 'Android 调试', icon: MobileOutlined, view: AndroidDebug },
+];
+</script>
+```
+
+### 6.4 FlowTabs 组件特性
+
+见 `components/FlowTabs.md` 完整规范，核心特性：
+
+- **4 色循环**：chip-a(绿) / chip-b(蓝) / chip-c(紫) / chip-d(橙)
+- **状态视觉**：未激活白底彩边 → hover 8%淡底 → 激活实色背景
+- **URL 同步**：通过 `?tab=xxx` query 参数，支持直接链接
+- **圆角 8px**：比全局 4px 大，更突出标签感
+- **字重 600**：强调流程步骤
+
+### 6.5 meta.color 菜单配色约定
+
+| 菜单 | 色值 | 语义 |
+|---|---|---|
+| 总览 | `#6366f1` | Indigo - 主色/概览 |
+| 环境准备 | `#30a46c` | Green - 成功/准备 |
+| 故障模拟 | `#e5484d` | Red - 错误/故障 |
+| 消息模拟 | `#0090ff` | Blue - 信息/数据流 |
+| 测试执行 | `#f76b15` | Orange - 执行/警告 |
+| 版本测试记录 | `#7c3aed` | Purple - 特殊/归档 |
+| 系统配置 | `#64748b` | Slate - 中性/配置 |
+| 外链直达 | `#06b6d4` | Cyan - 外部系统 |
+
+菜单配色通过 `meta.color` 自动应用到侧边栏（已支持）和顶部菜单栏。
 
 ---
 
